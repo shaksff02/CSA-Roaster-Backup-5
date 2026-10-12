@@ -2149,6 +2149,7 @@
     btn.disabled = true;
     label.textContent = 'Preparing PDF…';
     const dismissInfo = showToast('Preparing your PDF…', 'info', 20000);
+    let pdfFixStyle = null;
 
     try{
       const html2pdfLib = await loadHtml2Pdf();
@@ -2171,12 +2172,24 @@
       const safeName = agentName.replace(/[^\w\-]+/g, '_').replace(/^_+|_+$/g, '') || 'agent';
       const filename = `Salary_${safeName}_${sv}_to_${ev}.pdf`;
 
+      // html2pdf centres its capture container with `left:0; right:0; margin:auto`. When the page has a
+      // vertical scrollbar, the live layout and html2canvas's cloned layout differ by half the scrollbar
+      // width, so the capture is shifted and the right edge of the sheet gets cut off. Pinning the
+      // container to the left edge (and matching the clone's width to the real layout width) fixes that.
+      pdfFixStyle = document.createElement('style');
+      pdfFixStyle.textContent = '.html2pdf__container{left:0!important;right:auto!important;margin:0!important;}';
+      document.head.appendChild(pdfFixStyle);
+
       await html2pdfLib()
         .set({
           margin: [10, 10, 14, 10],
           filename,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+          html2canvas: {
+            scale: 2, useCORS: true, backgroundColor: '#ffffff',
+            scrollX: 0, scrollY: 0, x: 0, y: 0,
+            windowWidth: document.documentElement.clientWidth
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.ps-sum', '.ps-agent'] }
         })
@@ -2203,6 +2216,7 @@
       dismissInfo();
       showToast('Could not create the PDF. Check your internet connection and try again.', 'error', 5500);
     }finally{
+      if(pdfFixStyle) pdfFixStyle.remove();
       btn.disabled = false;
       label.textContent = idleText;
     }
